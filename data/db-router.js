@@ -7,6 +7,7 @@ const db = require('./db'); // importing database
 
 
 /******************************** REQUEST HANDLERS ********************************/
+// Post new post
 router.post('/', (req, res) => {
   const { title, contents } = req.body
   if((title === undefined || title === '') || (contents === undefined || contents === '')){
@@ -15,9 +16,9 @@ router.post('/', (req, res) => {
     db.insert(req.body)
     .then(newPostId => {
       console.log(newPostId)
-      db.findById(newPostId.id)
+      db.findById(newPostId.id) // Used to get comment obj including created date/time and id
         .then(userObj => {
-          res.status(201).json(userObj)
+          res.status(201).json(userObj) // Returns full comment obj 
         })
     })
     .catch(error => {
@@ -26,6 +27,7 @@ router.post('/', (req, res) => {
   }
 })
 
+// Get all posts
 router.get('/', (req, res) => {
   db.find()
     .then(posts => {
@@ -36,15 +38,14 @@ router.get('/', (req, res) => {
     })
 })
 
+// Get specified post
 router.get('/:id', (req, res) => {
   const id = req.params.id;
   db.findById(id)
     .then(post => {
-      // console.log(post)
-      if(!post.id){
+      if(!post[0]){ // Set to check existence of the first element in the array otherwise an empty array is returned instead of error message
         res.status(404).json({ error: "The post with the specified ID does not exist." })
-      }else if(post.id){
-        console.log(post)
+      }else{
         res.status(200).json(post)
       }
     })
@@ -53,12 +54,13 @@ router.get('/:id', (req, res) => {
     })
 })
 
+// Get all comments on a specified post
 router.get('/:id/comments', (req, res) => {
   const id = req.params.id;
   db.findPostComments(id)
     .then(comments => {
       console.log(comments)
-      if(!comments){
+      if(!comments[0]){ // Set to check existence of the first element in the array otherwise an empty array is returned instead of error message
         res.status(404).json({ error: "The post with the specified ID does not exist." })
       }else{
         res.status(200).json(comments)
@@ -69,59 +71,83 @@ router.get('/:id/comments', (req, res) => {
     })
 })
 
-// POSTING COMMENT
-  // 1. FIND POST ===> FINDBYID(REQ.PARAMS.ID)
-  // 2. POST COMMENT ===> INSERTCOMMENT(REQ.BODY)
-  // 3. FIND COMMENT AND SEND BACK ===> FINDCOMMENTBYID(ID GIVEN BY INSERTCOMMENT)
+// Posting comment to specified post
 router.post('/:id/comments', (req, res) => {
   const id = req.params.id;
-  const { text } = req.body;
-  db.findById(id)
-    .then(postId => {
-      console.log(postId)
-      if(!postId){
+  const info = req.body;
+  info.post_id = id;
+  if((info.text === undefined || info.text === '')){
+    res.status(400).json({ error: "Please provide text for the comment." })
+  }else{
+    db.findPostComments(id) // 1. Finds specified post
+      .then(postId => {
+        console.log(postId)
+        if(!postId[0]){ // Set to check existence of the first element in the array otherwise an empty array is returned instead of error message
+          res.status(404).json({ error: "The post with the specified ID does not exist." })
+        }else{
+          db.insertComment(req.body) // 2. Inserts comment
+            .then(comment => {
+              db.findCommentById(comment.id) // 3. Used to get comment obj including created date/time and id
+              .then(commentObj => {
+                res.status(201).json(commentObj) // Returns full comment object
+              })
+            })
+        }
+      })
+      .catch(err => {
+        res.status(500).json({ error: "There was an error while saving the comment to the database" })
+      })
+
+  }
+})
+
+// Deletes specified post
+router.delete('/:id', (req, res) => {
+  const id = req.params.id;
+  db.findById(id) // used to find particular post so the full deleted post can be returned; this is unnecessary if you just want to confirm the item has been deleted
+    .then(post => {
+      if(!post[0]){ // Set to check existence of the first element in the array otherwise an empty array is returned instead of error message
         res.status(404).json({ error: "The post with the specified ID does not exist." })
-      }else if((text === undefined || text === '')){
-        console.log("Please provide text for the comment.")
-        res.status(400).json({ error: "Please provide text for the comment." })
       }else{
-        db.insertComment(req.body)
-          .then(comment => {
-            res.status(201).json(comment)
-          })
+        db.remove(id)
+        .then(deletePost => {
+          console.log(deletePost)
+          if(!deletePost){
+            res.status(404).json({ error: "The post with the specified ID does not exist." })
+          }else{
+            res.status(205).json(post)
+          }
+        })
+        .catch(err => {
+          res.status(500).json({ error: "The post could not be removed" })
+        })
       }
-    })
-    .catch(err => {
-      res.status(500).json({ error: "There was an error while saving the comment to the database" })
     })
 })
 
-// Endpoints
-// Configure the API to handle to the following routes:
-
-// Method	Endpoint	Description
-// ***DONE*** POST /api/posts	Creates a post using the information sent inside the request body.
-  // ===> INSERT + FINDBYID
-
-//*****// POST	/api/posts/:id/comments	Creates a comment for the post with the specified id using information sent inside of the request body. 
-  // ===> FINDPOST
-
-// ***DONE*** GET	/api/posts	Returns an array of all the post objects contained in the database. 
-  // ===> FIND
-
-//*****// GET	/api/posts/:id	Returns the post object with the specified id. ===> FINDBYID
-
-//*****// GET	/api/posts/:id/comments	Returns an array of all the comment objects associated with the post with the specified id. ===> FINDPOSTCOMMENTS
-
-// DELETE	/api/posts/:id	Removes the post with the specified id and returns the deleted post object. You may need to make additional calls to the database in order to satisfy this requirement. ===> REMOVE
-
-// PUT	/api/posts/:id	Updates the post with the specified id using data from the request body. Returns the modified document, NOT the original. ===> UPDATE
-
-
-
-
-
-
-
+// Updates specified post
+router.put('/:id', (req, res) => {
+  const id = req.params.id;
+  const post = req.body;
+  if((post.title === undefined || post.title === '') || (post.contents === undefined || post.contents === '')){
+    res.status(400).json({ error: "Please provide title and contents for the post." })
+  }else{
+    db.update(id, post)
+    .then(update => {
+      console.log(update)
+      if(!update){
+        res.status(404).json({ error: "The post with the specified ID does not exist." })
+      }else{
+        db.findById(id) // Used to get comment obj including created date/time and id
+        .then(postObj => {
+          res.status(200).json(postObj) // Returns full post object
+        })
+      }
+    })
+    .catch(err => {
+      res.status(500).json({ error: "The post information could not be modified."  })
+    })
+  }
+})
 
 module.exports = router; // export router
