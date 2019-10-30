@@ -57,18 +57,26 @@ router.get('/:id', (req, res) => {
 // Get all comments on a specified post
 router.get('/:id/comments', (req, res) => {
   const id = req.params.id;
-  db.findPostComments(id)
-    .then(comments => {
-      console.log(comments)
-      if(!comments[0]){ // Set to check existence of the first element in the array otherwise an empty array is returned instead of error message
+  db.findById(id)
+    .then(post => {
+      if(!post[0]){ // checks whether post exists
         res.status(404).json({ error: "The post with the specified ID does not exist." })
       }else{
-        res.status(200).json(comments)
+        db.findPostComments(id)
+      .then(comments => {
+        console.log(comments)
+        if(!comments[0]){ // Set to check existence of the first element in the array otherwise an empty array is returned instead of error message
+          res.status(404).json({ error: "The post with the specified ID does not have any comments." })
+        }else{
+          res.status(200).json(comments)
+        }
+      })
+      .catch(err => {
+        res.status(500).json({ error: "The post information could not be retrieved." })
+      })
       }
     })
-    .catch(err => {
-      res.status(500).json({ error: "The post information could not be retrieved." })
-    })
+  
 })
 
 // Posting comment to specified post
@@ -79,7 +87,7 @@ router.post('/:id/comments', (req, res) => {
   if((info.text === undefined || info.text === '')){
     res.status(400).json({ error: "Please provide text for the comment." })
   }else{
-    db.findPostComments(id) // 1. Finds specified post
+    db.findById(id) // 1. Finds specified post
       .then(postId => {
         console.log(postId)
         if(!postId[0]){ // Set to check existence of the first element in the array otherwise an empty array is returned instead of error message
